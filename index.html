@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<script async defer type="module">
+			// @ts-check
+			import { range, MAX_LINE_BYTE_LENGTH } from './common.js'
+			//
+			const lis = new Map()
+
+			const handleEvent = event => {
+				// console.log('port message', event.data)
+				const { type, key } = event.data
+				if(type === 'new') {
+					const listElem = document.getElementById('List')
+					if(listElem === null) { return }
+					/** @type {HTMLTemplateElement|null} */
+					const template =  listElem.querySelector(':scope > template')
+					if(template === null) { return }
+					const { content } = template
+
+					const cloneContent = (/** @type {DocumentFragment} */(content.cloneNode(true)))
+					const li = cloneContent.querySelector('li')
+					if(li === null) { return }
+
+					/** @type {HTMLOutputElement|null} */
+					const liKey = li.querySelector('output[name="key"]')
+					/** @type {HTMLOutputElement|null} */
+					const liMin = li.querySelector('output[name="min"]')
+					/** @type {HTMLOutputElement|null} */
+					const liMax = li.querySelector('output[name="max"]')
+					/** @type {HTMLOutputElement|null} */
+					const liSum = li.querySelector('output[name="sum"]')
+					/** @type {HTMLOutputElement|null} */
+					const liCount = li.querySelector('output[name="count"]')
+					/** @type {HTMLOutputElement|null} */
+					const liResult = li.querySelector('output[name="result"]')
+
+					if(liKey === null) { return }
+					liKey.value = key
+
+					lis.set(key, ({
+						min = undefined,
+						max = undefined,
+						sum = undefined,
+						count = undefined
+					}) => {
+						if(min !== undefined && liMin !== null) { liMin.value = min }
+						if(max !== undefined && liMax !== null) { liMax.value = max }
+						if(sum !== undefined && liSum !== null) { liSum.value = (Math.trunc(sum * 100) / 100).toString() }
+						if(count !== undefined && liCount !== null) { liCount.value = count }
+						if(sum !== undefined && count !== undefined && liResult !== null) { liResult.value = (Math.trunc(sum / count * 100) / 100).toString() }
+					})
+
+					listElem.append(li)
+				}
+				else if(type === 'update') {
+					// console.log('update')
+					lis.get(key)(event.data)
+				}
+				else if(type === 'percent') {
+
+					const progressBar = /** @type {HTMLProgressElement|null} **/(document.getElementById('Progress'))
+					if(progressBar === null) { return }
+					progressBar.value = event.data.percent
+					if(event.data.done) { return }
+				}
+
+			}
+
+			let worker = undefined
+			globalThis.go = async function go(event) {
+				const { target } = event
+
+				target.disabled = true
+				const results = new Map()
+
+				const [ handle ] = await /** @type {any} */(window).showOpenFilePicker()
+					.catch(e => [])
+
+				if(handle === undefined) {
+					// console.log('no selection')
+					target.disabled = false
+					return
+				}
+
+				//
+				const listElem = document.getElementById('List')
+				const lis = listElem?.querySelectorAll(':scope > li')
+				lis?.forEach(li => li.remove())
+
+				//
+				const WORKER_URL = './worker.js'
+				if(worker) { worker.terminate() }
+				worker = new Worker(WORKER_URL, { type: 'module'})
+				worker.onmessage = handleEvent
+				worker.postMessage({ handle })
+
+
+				target.disabled = false
+			}
+
+			globalThis.gen = async function gen(event) {
+				const { target } = event
+
+				event.preventDefault()
+				event.stopPropagation()
+
+				target.disabled = true
+
+				// const directory = await navigator.storage.getDirectory()
+				// const handle = await directory.getFileHandle("handle", { create: true })
+				// const writable = await handle.createWritable({})
+
+				const handle  = await /** @type {any} */(window).showSaveFilePicker({
+					suggestedName: 'output.txt',
+					types: [
+      			{
+							description: 'Text File',
+							accept: { 'text/plain': [ '.txt' ] },
+						}
+					]
+				}).catch(e => {
+					// console.warn('caught', e)
+				})
+
+				if(handle === undefined) {
+					console.log('no selection')
+					target.disabled = false
+					return
+				}
+
+				const WORKER_URL = './gen-worker.js'
+
+				const genWorker = new Worker(WORKER_URL, { type: 'module'})
+				genWorker.onmessage = event => {}
+				genWorker.postMessage({ handle })
+
+
+				target.disabled = false
+			}
+
+		</script>
+		<style>
+			:root {
+				box-sizing: border-box;
+			}
+
+			@layer font {
+				*:not(:where(html, body)) { font-family: inherit; }
+				html { font-size: 100%; }
+				body { font-family: "Tahoma"; }
+			}
+
+			ul {
+				list-style: none;
+				padding: 1em;
+			}
+
+			section {
+				margin-block-end: 1em;
+			}
+
+			main {
+				display: flex;
+				justify-content: center;
+			}
+
+			form {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 1em;
+
+				& > fieldset {
+
+					flex-grow: 1;
+
+					display: flex;
+					flex-direction: column;
+					gap: 1em;
+					padding: 1em;
+
+					border-radius: 0.25em;
+					border-style: ridge;
+					border-color: rgb(78, 78, 78);
+
+					& > label {
+						display: grid;
+						grid-template-columns: max-content 1fr;
+						gap: 1em;
+
+						padding-block: 0.75em;
+
+						& progress {
+							align-self: center;
+						}
+
+						& > div {
+							display: flex;
+							gap: 1em;
+						}
+					}
+
+					& > legend {
+						&:empty {
+							padding: 0;
+							margin: 0;
+						}
+					}
+				}
+			}
+
+			ol#List > li {
+				display: grid;
+				grid-template-columns: repeat(6, 1fr);
+			}
+
+			button {
+				padding: 0.5em;
+				padding-inline: 1em;
+
+				background-color: green;
+				color: white;
+
+				&:disabled {
+					background-color: red;
+				}
+			}
+		</style>
+	</head>
+
+	<body>
+		<header>
+			<h1>1️⃣ 🐝 🏎️</h1>
+		</header>
+
+		<!--
+		<main>
+			<ul>
+				<li>
+					<form>
+						<fieldset>
+							<legend></legend>
+
+							<label>
+								<span>Number of Stations</span>
+								<select>
+									<option>1</option>
+									<option>5</option>
+									<option>10</option>
+									<option>1000</option>
+									<option>10000</option>
+								</select>
+							</label>
+
+							<label>
+								<span>Number of Rows</span>
+								<select>
+									<option>One</option>
+									<option>Thousand</option>
+									<option>Million</option>
+									<option>Billion</option>
+								</select>
+							</label>
+						</fieldset>
+						<fieldset>
+							<legend></legend>
+
+							<label>
+								<span>Generation progress</span>
+								<div>
+									<progress value="0"></progress>
+									<output>paused</output>
+								</div>
+							</label>
+
+							<button>Download</button>
+						</fieldset>
+
+					</form>
+				</li>
+			</ul>
+		</main>
+		-->
+
+		<section>
+			<button onclick="gen(event)">Generate</button>
+		</section>
+
+		<section>
+			<button onclick="go(event)">Process</button>
+			<progress id="Progress" name="progress" value="0" max="100"></progress>
+			<ol id="List">
+				<template>
+					<li>
+						<output name="key"></output>
+						<output name="min"></output>
+						<output name="max"></output>
+						<output name="count"></output>
+						<output name="sum"></output>
+						<output name="result"></output>
+					</li>
+				</template>
+			</ol>
+		</section>
+
+	</body>
+</html>
