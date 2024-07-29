@@ -2,7 +2,7 @@
 
 ## One Billion Row Challenge: How I Learned to Stop Worrying and Love the Browser
 
-The One Billion Row Challenge, in general, is an excessive in the processing capabilities and optimization of processing text from a file.
+The [One Billion Row Challenge](https://github.com/gunnarmorling/1brc), in general, is an excessive in the processing capabilities and optimization of processing text from a file.
 
 This repo specifically demonstrates an implementation in Javascript in the Browser.
 
